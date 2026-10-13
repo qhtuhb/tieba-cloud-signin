@@ -160,8 +160,7 @@ def classify(value):
     code = value.get("no", value.get("error_code", value.get("errno")))
     if str(code) == "0" and message in ("", "0", "None", "success", "成功"):
         return "signed"
-    if code is None and "error" in value and not value["error"]:
-        return "signed"
+    # 未返回明确的零错误码时不猜测成功。
     return "failed"
 
 
