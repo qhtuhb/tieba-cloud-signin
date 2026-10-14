@@ -154,8 +154,9 @@ class Client:
 
 def classify(value):
     message = str(value.get("error", value.get("error_msg", "")))
-    if any(word in message for word in ("验证", "验证码", "登录", "频繁", "风控")):
-        raise StopVerification("百度要求验证或重新登录，任务停止。")
+    code = value.get("no", value.get("error_code", value.get("errno")))
+    if str(code) == "2150040" or any(word in message.lower() for word in ("验证", "验证码", "登录", "频繁", "风控", "vcode", "captcha")):
+        raise StopVerification("百度要求验证码或重新登录，任务停止；不会自动绕过验证码。")
     if any(word in message for word in ("已经签", "已签到", "已签过")):
         return "already"
     code = value.get("no", value.get("error_code", value.get("errno")))
