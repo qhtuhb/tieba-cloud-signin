@@ -15,12 +15,12 @@ class Tests(unittest.TestCase):
             result = sign.main()
             return result, client.json.call_args_list, wait.call_args_list, summary.call_args
 
-    def test_retry_only_failed_and_wait_five_seconds(self):
+    def test_retry_only_failed_and_wait_three_seconds(self):
         ok = {"no": 0, "error": ""}
         result, calls, waits, summary = self.run_mock([{"no": 99}, ok, ok])
         self.assertEqual(result, 0)
         self.assertEqual([c.args[1]["kw"] for c in calls], ["a", "b", "a"])
-        self.assertEqual([c.args[0] for c in waits], [5.0, 5.0])
+        self.assertEqual([c.args[0] for c in waits], [3.0, 3.0])
         self.assertEqual(summary.args[:4], (2, 0, 0, 2))
 
     def test_retry_at_most_once(self):

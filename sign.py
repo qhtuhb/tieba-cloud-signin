@@ -226,7 +226,7 @@ def main():
                 print(f"开始一轮补签：{len(pending)} 个普通失败贴吧。")
             for index, (name, row_token) in enumerate(pending, 1):
                 if attempted:
-                    time.sleep(5.0)
+                    time.sleep(3.0)
                 attempted = True
                 details[name]["attempts"] += 1
                 try:
