@@ -125,7 +125,8 @@ class Client:
         return value
 
     def token(self):
-        value = self.json("/dc/common/tbs")
+        # POST avoids the web GET endpoint's legacy HTTP redirect.
+        value = self.json("/dc/common/tbs", {})
         if str(value.get("is_login")) != "1" or not value.get("tbs"):
             raise StopVerification("登录 Cookie 已失效，请重新登录百度并更新 TIEBA_COOKIE。")
         return value["tbs"]
