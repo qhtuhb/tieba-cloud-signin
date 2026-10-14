@@ -169,7 +169,7 @@ def classify(value):
 def summary(signed, already, failed, total, status):
     text = ("## 百度贴吧签到\n\n"
             f"状态：{status}\n\n"
-            f"关注贴吧：{total}；本次成功：{signed}；今日已签：{already}；失败：{failed}。\n")
+            f"关注贴吧：{total}；本次成功：{signed}；今日已签：{already}；失败：{failed}；未完成核验：{max(0, total-signed-already-failed)}。\n")
     print(text)
     target = os.environ.get("GITHUB_STEP_SUMMARY")
     if target:
