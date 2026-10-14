@@ -30,6 +30,16 @@ class Tests(unittest.TestCase):
         with self.assertRaises(sign.StopVerification):
             sign.classify({"error": "请先登录"})
 
+    def test_english_captcha_stops(self):
+        with self.assertRaises(sign.StopVerification):
+            sign.classify({"no": 2150040, "error": "need vcode"})
+
+    def test_tbs_uses_post(self):
+        client = sign.Client("BDUSS=example")
+        with patch.object(client, "json", return_value={"is_login": 1, "tbs": "dummy"}) as mocked:
+            self.assertEqual(client.token(), "dummy")
+            mocked.assert_called_once_with("/dc/common/tbs", {})
+
     def test_reject_cookie_header_injection(self):
         with self.assertRaises(sign.SignError):
             sign.Client("BDUSS=example\r\nX: bad")
