@@ -4,6 +4,42 @@ import sign
 
 
 class Tests(unittest.TestCase):
+    def run_mock(self, responses):
+        with patch.dict(sign.os.environ, {"TIEBA_COOKIE": "BDUSS=example"}), \
+             patch("sign.Client") as factory, patch("sign.time.sleep") as wait, \
+             patch("sign.summary") as summary:
+            client = factory.return_value
+            client.token.return_value = "dummy"
+            client.followed.return_value = {"a": "", "b": ""}
+            client.json.side_effect = responses
+            result = sign.main()
+            return result, client.json.call_args_list, wait.call_args_list, summary.call_args
+
+    def test_retry_only_failed_and_wait_five_seconds(self):
+        ok = {"no": 0, "error": ""}
+        result, calls, waits, summary = self.run_mock([{"no": 99}, ok, ok])
+        self.assertEqual(result, 0)
+        self.assertEqual([c.args[1]["kw"] for c in calls], ["a", "b", "a"])
+        self.assertEqual([c.args[0] for c in waits], [5.0, 5.0])
+        self.assertEqual(summary.args[:4], (2, 0, 0, 2))
+
+    def test_retry_at_most_once(self):
+        result, calls, waits, summary = self.run_mock([{"no": 99}] * 4)
+        self.assertEqual(result, 1)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(summary.args[:4], (0, 0, 2, 2))
+
+    def test_captcha_never_enters_retry(self):
+        result, calls, waits, summary = self.run_mock([{"no": 2150040, "error": "need vcode"}])
+        self.assertEqual(result, 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(waits), 0)
+
+    def test_retry_can_recognize_already_signed(self):
+        result, calls, waits, summary = self.run_mock([sign.SignError("timeout"), {"no": 0}, {"no": 1101, "error": "已签到"}])
+        self.assertEqual(result, 0)
+        self.assertEqual(summary.args[:4], (1, 1, 0, 2))
+
     def test_followed_and_pagination(self):
         parser = sign.FollowParser()
         parser.feed('''<table><tr><td><a href="/f?kw=test" title="测试吧">测试...</a></td>

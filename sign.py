@@ -93,7 +93,10 @@ class Client:
             raise SignError("拒绝向百度贴吧以外的域名发送登录凭据。")
         body = urlencode(data).encode("utf-8") if data is not None else None
         req = Request(url, data=body, headers=self.headers)
-        for attempt in range(3):
+        # A sign POST may have succeeded even when its response is lost.
+        # Do not immediately resubmit it after a timeout or server error.
+        attempts = 1 if parsed.path == "/sign/add" else 3
+        for attempt in range(attempts):
             try:
                 with self.opener.open(req, timeout=30) as response:
                     raw = response.read()
@@ -107,10 +110,10 @@ class Client:
             except HTTPError as exc:
                 if exc.code in (401, 403, 429):
                     raise StopVerification("登录失效、访问受限或请求过于频繁；任务已停止。") from None
-                if attempt == 2 or exc.code < 500:
+                if attempt == attempts - 1 or exc.code < 500:
                     raise SignError("百度接口返回 HTTP " + str(exc.code)) from None
             except (URLError, TimeoutError):
-                if attempt == 2:
+                if attempt == attempts - 1:
                     raise SignError("网络请求失败，有限重试后仍无法连接百度。") from None
             time.sleep(2 ** attempt)
 
@@ -188,19 +191,35 @@ def main():
         forums = client.followed()
         total = len(forums)
         print(f"已读取 {total} 个关注贴吧；不会输出 Cookie 或关注列表。")
-        for index, (name, row_token) in enumerate(forums.items(), 1):
-            try:
-                status = classify(client.json("/sign/add", {"ie": "utf-8", "kw": name, "tbs": row_token or token}))
-                signed += status == "signed"
-                already += status == "already"
-                failed += status == "failed"
-            except StopVerification:
-                raise
-            except SignError:
-                failed += 1
-            print(f"进度 {index}/{total}，成功 {signed}，已签 {already}，失败 {failed}")
-            if index < total:
-                time.sleep(1.0)
+        pending = list(forums.items())
+        attempted = False
+        for round_no in (1, 2):
+            retry = []
+            if round_no == 2 and pending:
+                print(f"开始一轮补签：{len(pending)} 个普通失败贴吧。")
+            for index, (name, row_token) in enumerate(pending, 1):
+                if attempted:
+                    time.sleep(5.0)
+                attempted = True
+                try:
+                    status = classify(client.json("/sign/add", {"ie": "utf-8", "kw": name, "tbs": row_token or token}))
+                except StopVerification:
+                    raise
+                except SignError:
+                    status = "failed"
+                if status == "failed":
+                    retry.append((name, row_token))
+                    if round_no == 1:
+                        failed += 1
+                else:
+                    signed += status == "signed"
+                    already += status == "already"
+                    if round_no == 2:
+                        failed -= 1
+                print(f"第 {round_no} 轮 {index}/{len(pending)}，成功 {signed}，已签 {already}，未解决失败 {failed}", flush=True)
+            pending = retry
+            if not pending:
+                break
         summary(signed, already, failed, total, "完成" if not failed else "部分失败")
         return 1 if failed else 0
     except SignError as exc:
