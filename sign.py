@@ -180,8 +180,34 @@ def summary(signed, already, failed, total, status):
             stream.write(text)
 
 
+def save_report(details, status, reason):
+    directory = os.environ.get("TIEBA_REPORT_DIR")
+    if not directory:
+        return
+    from datetime import datetime, timezone, timedelta
+    from pathlib import Path
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=True)
+    report = {"time": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+              "status": status, "reason": reason, "forums": details}
+    (root / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    labels = {"signed": "签到成功", "already": "今日已签", "failed": "失败", "unverified": "未核验", "verification": "要求人工验证"}
+    text = "\n### 逐吧签到详情\n\n| 贴吧 | 最终结果 | 提交次数 |\n|---|---|---|\n"
+    for name, item in details.items():
+        safe_name = name.replace("|", "／").replace("\n", " ").replace("\r", " ").replace("<", "&lt;").replace(">", "&gt;")
+        text += f"| {safe_name} | {labels[item['status']]} | {item['attempts']} |\n"
+    (root / "details.md").write_text(text, encoding="utf-8")
+    target = os.environ.get("GITHUB_STEP_SUMMARY")
+    if target:
+        with open(target, "a", encoding="utf-8") as stream:
+            stream.write(text)
+
+
 def main():
     signed = already = failed = total = 0
+    details = {}
+    report_status = "中断"
+    reason = ""
     try:
         cookie = os.environ.get("TIEBA_COOKIE", "").strip()
         if not cookie or not re.search(r"(?:^|;\s*)BDUSS=", cookie):
@@ -190,6 +216,7 @@ def main():
         token = client.token()
         forums = client.followed()
         total = len(forums)
+        details = {name: {"status": "unverified", "attempts": 0} for name in forums}
         print(f"已读取 {total} 个关注贴吧；不会输出 Cookie 或关注列表。")
         pending = list(forums.items())
         attempted = False
@@ -201,12 +228,15 @@ def main():
                 if attempted:
                     time.sleep(5.0)
                 attempted = True
+                details[name]["attempts"] += 1
                 try:
                     status = classify(client.json("/sign/add", {"ie": "utf-8", "kw": name, "tbs": row_token or token}))
                 except StopVerification:
+                    details[name]["status"] = "verification"
                     raise
                 except SignError:
                     status = "failed"
+                details[name]["status"] = status
                 if status == "failed":
                     retry.append((name, row_token))
                     if round_no == 1:
@@ -220,12 +250,16 @@ def main():
             pending = retry
             if not pending:
                 break
-        summary(signed, already, failed, total, "完成" if not failed else "部分失败")
+        report_status = "完成" if not failed else "部分失败"
+        summary(signed, already, failed, total, report_status)
         return 1 if failed else 0
     except SignError as exc:
+        reason = str(exc)
         summary(signed, already, failed, total, "中断")
-        print("原因：" + str(exc), file=sys.stderr)
+        print("原因：" + reason, file=sys.stderr)
         return 1
+    finally:
+        save_report(details, report_status, reason)
 
 
 if __name__ == "__main__":

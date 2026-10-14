@@ -23,4 +23,13 @@ jobs:
       - name: 签到全部关注贴吧
         env:
           TIEBA_COOKIE: ${{ secrets.TIEBA_COOKIE }}
+          TIEBA_REPORT_DIR: reports
         run: python -u sign.py
+      - name: 保存签到详情
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tieba-sign-report
+          path: reports/
+          retention-days: 30
+          if-no-files-found: warn
