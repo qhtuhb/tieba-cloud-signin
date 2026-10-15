@@ -30,7 +30,14 @@ class Tests(unittest.TestCase):
         self.assertEqual(summary.args[:4], (0, 0, 2, 2))
 
     def test_captcha_never_enters_retry(self):
-        result, calls, waits, summary = self.run_mock([{"no": 2150040, "error": "need vcode"}])
+        result, calls, waits, summary = self.run_mock([{"no": 2150040, "error": "need vcode"}, {"no": 0}])
+        self.assertEqual(result, 1)
+        self.assertEqual([c.args[1]["kw"] for c in calls], ["a", "b"])
+        self.assertEqual(len(waits), 1)
+        self.assertEqual(summary.args[0], 1)
+
+    def test_rate_limit_still_stops(self):
+        result, calls, waits, summary = self.run_mock([{"no": 1102}])
         self.assertEqual(result, 1)
         self.assertEqual(len(calls), 1)
         self.assertEqual(len(waits), 0)
