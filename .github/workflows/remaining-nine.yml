@@ -1,0 +1,32 @@
+name: 固定九吧单轮补签测试
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tieba-daily-sign
+  cancel-in-progress: false
+jobs:
+  remaining-nine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 测试固定白名单与遇验证停止
+        run: python -m unittest -v
+      - name: 固定九吧仅提交一轮
+        env:
+          TIEBA_COOKIE: ${{ secrets.TIEBA_COOKIE }}
+          TIEBA_REPORT_DIR: reports
+        run: python -u sign_remaining.py
+      - name: 保存私有签到详情
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tieba-sign-report
+          path: reports/
+          retention-days: 30
+          if-no-files-found: warn
