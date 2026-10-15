@@ -9,7 +9,8 @@ ALLOWLIST = ("3dmax", "宋朝", "吐槽", "金铲铲之战", "trollstore", "魔�
 
 
 def classify(value):
-    # Stop conservatively on any login, verification or rate-limit indication.
+    # Preserve the precise safe diagnostic from the shared classifier first.
+    result = sign.classify(value)
     message = str(value.get("error", value.get("error_msg", ""))).lower()
     if any(word in message for word in ("限流", "受限", "安全", "验证", "登录", "频繁", "风控", "captcha", "vcode", "verify", "verification", "login", "rate limit", "too many")):
         raise sign.StopVerification("验证码、登录或限流提示；限定补签立即停止，不再提交后续贴吧。")
