@@ -20,6 +20,11 @@ class StopVerification(SignError):
     pass
 
 
+class ForumCaptcha(StopVerification):
+    """The current forum requires a captcha; do not retry this forum."""
+    pass
+
+
 class NoRedirects(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise StopVerification("百度要求跳转验证或重新登录，请更新登录 Cookie。")
@@ -159,7 +164,7 @@ def classify(value):
     message = str(value.get("error", value.get("error_msg", "")))
     code = value.get("no", value.get("error_code", value.get("errno")))
     if str(code) == "2150040" or any(word in message.lower() for word in ("vcode", "captcha", "验证码")):
-        raise StopVerification("百度要求验证码（错误码 " + (str(code) if str(code).isdigit() else "未知") + "）；任务停止，等待人工验证。")
+        raise ForumCaptcha("当前贴吧要求验证码（错误码 " + (str(code) if str(code).isdigit() else "未知") + "）；跳过且不补签。")
     if str(code) == "1102":
         raise StopVerification("签到过快（错误码 1102）；任务停止，不连续重试。")
     if any(word in message.lower() for word in ("验证", "登录", "频繁", "风控", "login", "rate limit", "too many")):
@@ -235,6 +240,11 @@ def main():
                 details[name]["attempts"] += 1
                 try:
                     status = classify(client.json("/sign/add", {"ie": "utf-8", "kw": name, "tbs": row_token or token}))
+                except ForumCaptcha as exc:
+                    details[name]["status"] = "verification"
+                    details[name]["reason"] = str(exc)
+                    print(f"第 {round_no} 轮 {index}/{len(pending)}：验证码，跳过且不补签。", flush=True)
+                    continue
                 except StopVerification:
                     details[name]["status"] = "verification"
                     raise
@@ -254,9 +264,10 @@ def main():
             pending = retry
             if not pending:
                 break
-        report_status = "完成" if not failed else "部分失败"
+        incomplete = any(item["status"] not in ("signed", "already") for item in details.values())
+        report_status = "部分完成" if incomplete else "完成"
         summary(signed, already, failed, total, report_status)
-        return 1 if failed else 0
+        return 1 if incomplete else 0
     except SignError as exc:
         reason = str(exc)
         summary(signed, already, failed, total, "中断")
